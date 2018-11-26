@@ -1,0 +1,2 @@
+26. november 2018: Added Import-AzureBlueprintArtifact
+15. november 2018: Added listing for Blueprints

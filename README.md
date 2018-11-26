@@ -11,3 +11,6 @@ Artifact kind can be one of these 3:
 * policyAssignment
 * template
 * roleAssignment
+
+## Import ARM templates to a new or existing blueprint
+By using the Import-AzureBlueprintArtifact you can import existing ARM templates and transform them to Blueprint Artifacts and add theparameters to the Blueprint.
