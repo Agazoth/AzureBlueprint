@@ -1,2 +1,3 @@
+6. december 2018: Fixed "No metadata -> Metadata string not {}" - thanks to Alexander Frankel
 26. november 2018: Added Import-AzureBlueprintArtifact
 15. november 2018: Added listing for Blueprints

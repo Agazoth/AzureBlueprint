@@ -471,7 +471,7 @@ function Set-ArtifactParameter {
                 $NewNPdisplayName =  $DisplayNameStyle -f $CurrentNP, $ResourceGroupName
                 Add-Member -InputObject $NewObject -NotePropertyName $NewNPName -NotePropertyValue $ParameterObject.$CurrentNP
                 If (-not $NewObject.$NewNPName.metadata){
-                    Add-Member -InputObject $NewObject.$NewNPName -NotePropertyName metadata -NotePropertyValue ''
+                    Add-Member -InputObject $NewObject.$NewNPName -NotePropertyName metadata -NotePropertyValue @{}
                 }
                 if (-not $NewObject.$NewNPName.metadata.displayName){
                     Add-Member -InputObject $NewObject.$NewNPName.metadata -NotePropertyName displayName -NotePropertyValue $NewNPdisplayName
