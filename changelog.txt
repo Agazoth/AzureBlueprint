@@ -1,3 +1,7 @@
+8. december 2018: Added Get-AzureBlueprintImportParameters cmdlet
+                  Added Value from pipeline to Import-AzureBlueprintArtifact
+                  Added option for importing multiple ARM template to a single resource group to Import-AzureBlueprintArtifact
+                  Bugfix on private cmdlet updating the blueprint
 6. december 2018: Fixed "No metadata -> Metadata string not {}" - thanks to Alexander Frankel
 26. november 2018: Added Import-AzureBlueprintArtifact
 15. november 2018: Added listing for Blueprints

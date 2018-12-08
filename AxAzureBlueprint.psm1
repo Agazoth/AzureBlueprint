@@ -131,83 +131,133 @@ function Get-AzureBlueprintArtifact {
         else {$ArtifactJson}
     }
 }
-function Import-AzureBlueprintArtifact {
+function Get-AzureBlueprintImportParameters {
     [CmdletBinding()]
     param (
-        [ValidateScript({$_.exists})]
+        [ValidateScript( {$_.exists})]
+        [System.IO.DirectoryInfo]$ARMTemplateDirectory,
+        [switch]$UseFilenameAsArtifactname
+    )
+    
+    begin {
+    }
+    
+    process {
+        $Files = Get-ChildItem $ARMTemplateDirectory -filter '*json'
+        $Objects = foreach ($File in $Files){
+            if (!$UseFilenameAsArtifactname){
+                $ArtifactName = Read-Host -Prompt "ArtifactName for $($File.name)"
+            } else {
+                $ArtifactName = $File.Basename
+            }
+            $ResourceGroupName = Read-Host -Prompt "Resource Group name for $($File.name)"
+            [PSCustomObject]@{
+                ARMTemplateJson = $File.FullName
+                ArtifactName = $ArtifactName
+                ResourceGroup = $ResourceGroupName
+            }
+        }
+    }
+    
+    end {
+        $Objects
+    }
+}
+function Import-AzureBlueprintArtifact {
+    [CmdletBinding(DefaultParameterSetName = 'SingleFile')]
+    param (
+        [parameter(ValueFromPipelineByPropertyName=$true, ParameterSetName = 'SingleFile')]
+        [ValidateScript( {$_.exists})]
         [System.IO.FileInfo]$ARMTemplateJson,
-        [ValidateScript({$_.exists})]
+        [parameter(ParameterSetName = 'Directory')]
+        [ValidateScript( {$_.exists})]
+        [System.IO.DirectoryInfo]$ARMTemplateDirectory,
+        [ValidateScript( {$_.exists})]
         [System.Io.DirectoryInfo]$TargetDirectory,
-        [parameter(mandatory=$true)]
+        [parameter(ValueFromPipelineByPropertyName=$true, mandatory = $true)]
         [string]$ResourceGroup,
-        [parameter(mandatory=$true)]
+        [parameter(ValueFromPipelineByPropertyName=$true, ParameterSetName = 'SingleFile', mandatory = $true)]
         [string]$ArtifactName,
         [string]$NewBlueprintName = 'blueprint'
     )
     
     begin {
-        $JsonObjects = Get-JsonObject -BlueprintFolder $TargetDirectory.FullName
-        $ARMTemplate = ConvertFrom-Json -InputObject $(Get-Content $ARMTemplateJson.Fullname -Raw)
-        $CurrentParameters = $ARMTemplate.parameters
-        if (!$CurrentParameters ){
-            $ARMTemplate
-            continue
-        }
-        $MarkedParameters = Set-ArtifactParameter -ParameterObject $CurrentParameters -ResourceGroup $ResourceGroup
-        Write-Verbose "Blueprint parameters has been calculated"
+
     }
     
     process {
-        $Blueprint = $JsonObjects | Where-Object {!$_.kind}
-        if ($Blueprint){
-            Write-Verbose "Updating $($Blueprint.Filepath)"
-            $Blueprint = Get-JsonObject -BlueprintFile $Blueprint.Filepath
-            $Blueprint.JsonObject = Add-BlueprintParameter -BlueprintJson $Blueprint.JsonObject -ArtifactParameters $MarkedParameters -ResourceGroup $ResourceGroup
-        } else {
-            $Blueprintfile = '{0}\blueprint.json' -f $TargetDirectory.FullName
-            Write-Warning "No blueprint found - creating $Blueprintfile"
-            $Blueprint = [PSCustomObject]@{
-                Filepath = $Blueprintfile
-                Content = ''
-                Kind = $Null
-                BaseName = $NewBlueprintName 
-                Name = '{0}.json' -f $NewBlueprintName 
-                Blueprint = $TargetDirectory.Name
-                JsonObject = New-BlueprintJsonObject -Parameters $MarkedParameters -ResourceGroup $ResourceGroup
-            }
+        if ($PSCmdlet.ParameterSetName -eq 'Directory') {
+            $ARMTemplateJsons = Get-ChildItem $ARMTemplateDirectory -Filter '*json'
         }
-        $Blueprint.Content = Convertto-Json -InputObject $Blueprint.JsonObject -Depth 99
-        $Blueprint.Content | Out-file $Blueprint.Filepath
+        else {
+            $ARMTemplateJsons = $ARMTemplateJson
+        }
+        foreach ($ARMTemplateJson in $ARMTemplateJsons) {
+            if ($PSCmdlet.ParameterSetName -eq 'Directory') {
+                $ArtifactName = $ARMTemplateJson.BaseName
+            }
+            $JsonObjects = Get-JsonObject -BlueprintFolder $TargetDirectory.FullName
+            $ARMTemplate = ConvertFrom-Json -InputObject $(Get-Content $ARMTemplateJson.Fullname -Raw)
+            $CurrentParameters = $ARMTemplate.parameters
+            if (!$CurrentParameters ) {
+                $ARMTemplate
+                continue
+            }
+            $MarkedParameters = Set-ArtifactParameter -ParameterObject $CurrentParameters -ResourceGroup $ResourceGroup
+            Write-Verbose "Blueprint parameters has been calculated"
 
-        $PairHash = Set-ArtifactParameter -ParameterObject $CurrentParameters -ResourceGroup $ResourceGroup -AsPairHash
-        $PropParams = New-Object -TypeName PSCustomObject
-        $TemplParams = New-Object -TypeName PSCustomObject
-        foreach ($key in $PairHash.Keys){
-            $ParamHash = @{
-                InputObject = $PropParams
-                NotePropertyName = $key
-                NotePropertyValue = [PsCustomObject]@{value = "[parameters('{0}')]" -f $PairHash[$key]}
+            $Blueprint = $JsonObjects | Where-Object {!$_.kind}
+            if ($Blueprint) {
+                Write-Verbose "Updating $($Blueprint.Filepath)"
+                $Blueprint = Get-JsonObject -BlueprintFile $Blueprint.Filepath
+                $Blueprint.JsonObject = Add-BlueprintParameter -BlueprintJsonObject $Blueprint.JsonObject -ArtifactParameters $MarkedParameters -ResourceGroup $ResourceGroup
             }
-            Add-Member @ParamHash
-            $ParamHash = @{
-                InputObject = $TemplParams
-                NotePropertyName = $key
-                NotePropertyValue = [PsCustomObject]@{type = $CurrentParameters.$key.type}
+            else {
+                $Blueprintfile = '{0}\blueprint.json' -f $TargetDirectory.FullName
+                Write-Warning "No blueprint found - creating $Blueprintfile"
+                $Blueprint = [PSCustomObject]@{
+                    Filepath   = $Blueprintfile
+                    Content    = ''
+                    Kind       = $Null
+                    BaseName   = $NewBlueprintName 
+                    Name       = '{0}.json' -f $NewBlueprintName 
+                    Blueprint  = $TargetDirectory.Name
+                    JsonObject = New-BlueprintJsonObject -Parameters $MarkedParameters -ResourceGroup $ResourceGroup
+                }
             }
-            Add-Member @ParamHash
-        }
+            $Blueprint.Content = Convertto-Json -InputObject $Blueprint.JsonObject -Depth 99
+            $Blueprint.Content | Out-file $Blueprint.Filepath
 
-        $ARMTemplate.parameters = $TemplParams
-        $Artifact = [PSCustomObject]@{
-            kind = 'template'
-            properties = [PSCustomObject]@{
-                template = $ARMTemplate
-                resourceGroup = $ResourceGroup
-                parameters = $PropParams
+            $PairHash = Set-ArtifactParameter -ParameterObject $CurrentParameters -ResourceGroup $ResourceGroup -AsPairHash
+            $PropParams = New-Object -TypeName PSCustomObject
+            $TemplParams = New-Object -TypeName PSCustomObject
+            foreach ($key in $PairHash.Keys) {
+                $ParamHash = @{
+                    InputObject       = $PropParams
+                    NotePropertyName  = $key
+                    NotePropertyValue = [PsCustomObject]@{value = "[parameters('{0}')]" -f $PairHash[$key]}
+                }
+                Add-Member @ParamHash
+                $ParamHash = @{
+                    InputObject       = $TemplParams
+                    NotePropertyName  = $key
+                    NotePropertyValue = [PsCustomObject]@{type = $CurrentParameters.$key.type}
+                }
+                Add-Member @ParamHash
             }
+
+            $ARMTemplate.parameters = $TemplParams
+            $Artifact = [PSCustomObject]@{
+                kind       = 'template'
+                properties = [PSCustomObject]@{
+                    template      = $ARMTemplate
+                    resourceGroup = $ResourceGroup
+                    parameters    = $PropParams
+                }
+            }
+            $ArtifactFile = '{0}\{1}.json' -f $TargetDirectory.FullName, $ArtifactName
+            Convertto-Json -InputObject $Artifact -Depth 99 | Out-File $ArtifactFile
         }
-        $ArtifactFile = '{0}\{1}.json' -f $TargetDirectory.FullName,$ArtifactName
-        Convertto-Json -InputObject $Artifact -Depth 99 | Out-File $ArtifactFile
     }
     
     end {
@@ -315,29 +365,35 @@ function Add-BlueprintParameter {
     }
     
     process {
-        if (-not $BlueprintJsonObject.resourceGroups.$ResourceGroupName) {
-            Write-Verbose "Adding ResourceGroup $ResourceGroupName to $($BlueprintJsonObject.Name)"
-            $AddMemberParams = @{
-                InputObject       = $BlueprintJsonObject.resourceGroups
+        $AddMemberParams = @()
+        if (-not $BlueprintJsonObject.properties.resourceGroups.$ResourceGroupName) {
+            Write-Verbose "Adding ResourceGroup $ResourceGroupName to the blueprint"
+            $AddMemberParams += @{
+                InputObject       = $BlueprintJsonObject.properties.resourceGroups
                 NotePropertyName  = $ResourceGroupName
                 NotePropertyValue = @{}
+                ErrorAction       = 'Stop'
             }            
         }
         $ArtifactNames = Get-Member -MemberType NoteProperty -InputObject $ArtifactParameters  | Select-Object -expand  Name
         foreach ($ArtifactName in $ArtifactNames) {
-            $AddMemberParams = @{
+            $AddMemberParams += @{
                 InputObject       = $BlueprintJsonObject.properties.parameters
                 NotePropertyName  = $ArtifactName
                 NotePropertyValue = $ArtifactParameters.$ArtifactName
-                ErrorAction = 'Stop'
+                ErrorAction       = 'Stop'
             }
-            try {
-                Add-Member @AddMemberParams
-            } catch {
-                Write-Verbose "$ArtifactName is already in the Blueprint"
-            }
-            
         }
+        foreach ($Set in $AddMemberParams) {
+            try {
+                Add-Member @Set
+            }
+            catch {
+                Write-Verbose "$($Set.NotePropertyName) is already in the Blueprint"
+            
+            }
+        }
+            
     }
     
     end {
