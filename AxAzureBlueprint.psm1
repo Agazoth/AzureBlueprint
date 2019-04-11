@@ -7,10 +7,10 @@ function Connect-AzureBlueprint {
     )
     
     begin {
-        $Script:AzureContext = Get-AzureRmContext
+        $Script:AzureContext = Get-AzContext
         if (!$Script:AzureContext){
-            Login-AzureRMAccount
-            $Script:AzureContext = Get-AzureRmContext
+            Login-AzAccount
+            $Script:AzureContext = Get-AzContext
         }
         if (!$Script:AzureContext){
             Write-Warning "Could not connect to Azure"
@@ -19,10 +19,10 @@ function Connect-AzureBlueprint {
     }
     
     process {
-        $ManagementGroups = Get-AzureRmManagementGroup
+        $ManagementGroups = Get-AzManagementGroup
         if ($ManagementGroups.Name -notcontains $ManagementGroupName){
             if ($Force){
-                New-AzureRmManagementGroup -GroupName $ManagementGroupName
+                New-AzManagementGroup -GroupName $ManagementGroupName
             } else {
                 Write-Warning "$ManagementGroupName not found. Use the Force switch if you want to create it"
                 continue
